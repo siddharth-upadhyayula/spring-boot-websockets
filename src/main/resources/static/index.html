@@ -1,0 +1,95 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <title>WS Heartbeat Demo</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 20px; }
+    button { margin-right: 8px; }
+    #log { white-space: pre-wrap; border: 1px solid #ddd; padding: 12px; border-radius: 10px; height: 360px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h2>Spring Boot WebSocket: Hello + Heartbeat</h2>
+
+  <div>
+    <button onclick="connect()">Connect</button>
+    <button onclick="sendHello()">Send Hello</button>
+    <button onclick="disconnect()">Disconnect</button>
+  </div>
+
+  <h3>Log</h3>
+  <div id="log"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+
+  <script>
+    let stompClient = null;
+    let appHbTimer = null;
+    const clientId = "client-" + Math.floor(Math.random() * 10000);
+
+    function log(msg) {
+      const el = document.getElementById("log");
+      el.textContent += msg + "\n";
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function connect() {
+      if (stompClient && stompClient.connected) {
+        log("Already connected.");
+        return;
+      }
+
+      const socket = new SockJS("/ws");
+      stompClient = Stomp.over(socket);
+      stompClient.debug = null; // silence verbose logs
+
+      // STOMP protocol heartbeats (best effort with simple broker + SockJS)
+      stompClient.heartbeat.outgoing = 10000;
+      stompClient.heartbeat.incoming = 10000;
+
+      stompClient.connect({}, frame => {
+        log("CONNECTED: " + frame + " as " + clientId);
+
+        stompClient.subscribe("/topic/hello", msg => log("HELLO <- " + msg.body));
+        stompClient.subscribe("/topic/heartbeat", msg => log("HEARTBEAT <- " + msg.body));
+
+        // App-level heartbeat message exchange (explicit JSON)
+        appHbTimer = setInterval(() => {
+          if (stompClient && stompClient.connected) {
+            stompClient.send("/app/heartbeat", {}, JSON.stringify({
+              from: clientId,
+              timestamp: Date.now()
+            }));
+            log("HEARTBEAT -> {from:" + clientId + "}");
+          }
+        }, 5000);
+
+        sendHello();
+      }, err => {
+        log("CONNECT ERROR: " + err);
+      });
+    }
+
+    function sendHello() {
+      if (!stompClient || !stompClient.connected) {
+        log("Not connected.");
+        return;
+      }
+      stompClient.send("/app/hello", {}, JSON.stringify({
+        from: clientId,
+        message: "Hello World from browser"
+      }));
+      log("HELLO -> sent");
+    }
+
+    function disconnect() {
+      if (appHbTimer) clearInterval(appHbTimer);
+      if (stompClient) {
+        stompClient.disconnect(() => log("DISCONNECTED"));
+      }
+    }
+  </script>
+</body>
+</html>

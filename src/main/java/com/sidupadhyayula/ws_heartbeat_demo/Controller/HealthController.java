@@ -1,4 +1,4 @@
-package com.sidupadhyayula.ws_heartbeat_demo;
+package com.sidupadhyayula.ws_heartbeat_demo.Controller;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
